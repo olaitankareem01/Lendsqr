@@ -53,7 +53,6 @@ class AccountService {
                
                }
                
-
                   
                response = {
                   status: true,
@@ -62,6 +61,7 @@ class AccountService {
                   balance: 0.00
                }
             
+               return response;
                
             }
          }
