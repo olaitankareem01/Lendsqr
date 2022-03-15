@@ -17,60 +17,60 @@ class AccountService {
 
          //checks if a customer's  email already exist
         var ExistingCustomer = await custRepo.FindCustomer(email);
-        
-
-        if(ExistingCustomer.length === 0){
+        var response;
+        if(ExistingCustomer.length > 0){
+            response = {
+               status:false,
+               message:"Email already exists" 
+            }
+        }
+        else{
       
            //preparing an object to be sent to stripe for account creation
-            var createDto = {
-                email:`${email}`,
-                country: 'US',
-                type:"custom",
-                capabilities: {
-                    card_payments: {requested: true},
-                   transfers: {requested: true}
-                  }
-            };
+               var createDto = {
+                  email:`${email}`,
+                  country: 'US',
+                  type:"custom",
+                  capabilities: {
+                     card_payments: {requested: true},
+                     transfers: {requested: true}
+                     }
+               };
 
+            //creates account on stripe for the customer
+            var stripeAccount = await stripe.accounts.create(createDto);
             
-         //creates account on stripe for the customer
-          var stripeAccount = await stripe.accounts.create(createDto);
-         
-           
-          if(stripeAccount != undefined && stripeAccount != null)
-          {
-             
-             var ExistingAccount = await acctRepo.FindAccount(stripeAccount.id);
-
-             if(ExistingAccount === null || ExistingAccount === undefined || ExistingAccount.length ===0){
-               var acctCreated = await acctRepo.CreateAccount(stripeAccount.id,stripeAccount.type);
-              
-               var custCreated = await custRepo.RegisterCustomer(lastName,firstName,email,password,acctCreated[0]);
-              
-             }
-             else{
-                    return null;
-             }
-
+            
+            if(stripeAccount != undefined && stripeAccount != null)
+            {
                
-          var response = {
-            email:email,
-            accountRef:stripeAccount.id,
-            balance: 0.00
-          }
-          
-          return response;
-            
-         }
-          
-       
-          
-      }
+               var ExistingAccount = await acctRepo.FindAccount(stripeAccount.id);
 
-       return null;
+               if(ExistingAccount === null || ExistingAccount === undefined || ExistingAccount.length ===0){
+                  var acctCreated = await acctRepo.CreateAccount(stripeAccount.id,stripeAccount.type);
+               
+                  var custCreated = await custRepo.RegisterCustomer(lastName,firstName,email,password,acctCreated[0]);
+               
+               }
+               
+
+                  
+               response = {
+                  status: true,
+                  email:email,
+                  accountRef:stripeAccount.id,
+                  balance: 0.00
+               }
+            
+               
+            }
+         }
+
    }catch(err){
       console.log(err);
-   
+   }
+   finally{
+       return response;
    }
      
 }
@@ -82,13 +82,17 @@ class AccountService {
       try{
           //checks whether the account exists in the database
        var OwnerAccount = await acctRepo.FindAccount(accountRef);
-       var OwnerNewBalance = OwnerAccount[0].balance + amount;
-       var response = {
-          balance : OwnerNewBalance
+       var OwnerNewBalance;
+       var response;
+       if(OwnerAccount === undefined || OwnerAccount.length === 0){
+          response = null;
        }
-      
-       if(OwnerAccount != null && OwnerAccount != undefined){
+      else{
         
+          OwnerNewBalance = OwnerAccount[0].balance + amount;
+          response = {
+            balance : OwnerNewBalance
+         }
          //gets a token from stripe to uniquely identify the user's card
          var depositorsCard = await stripe.tokens.create({
            card:{
@@ -111,9 +115,7 @@ class AccountService {
       
 
       }
-      else{
-           response = null;
-      }
+     
 
    }catch(err){
 
@@ -239,12 +241,12 @@ class AccountService {
              });
 
                //after creating the bank account token,fund is tranferred from the customer's account  to his bank account
-               var fundAdded =  await this.TransferFund(accountRef,bankAccountToken.id,amount,currency,description);
-               if(fundAdded.success != null && fundAdded.success != undefined){
-                  return response;
-               }
-               response = null;
-           }
+                await this.TransferFund(accountRef,bankAccountToken.id,amount,currency,description);    
+         }
+         else{
+            response = null;
+         }
+
           
         }
        catch(err){

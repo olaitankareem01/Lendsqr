@@ -4,7 +4,7 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const res = require("express/lib/response");
 dotenv.config();
-const port = process.env.PORT;
+const port = process.env.PORT || 5000;
 const app = express();
 const AccountService = require("./Services/AccountService");
 const acctService = new AccountService();
@@ -45,9 +45,20 @@ app.use(
     let password = req.body.password;
     let lastName = req.body.lastName;
     let firstName = req.body.firstName;
+
     var response = await acctService.CreateAccount(lastName,firstName,email,password);
-    if(response != null){
-      res.status(200).send(response);
+
+    if(response != undefined && response.status === false ){
+      res.status(400).send({
+         status: 400,
+          message: response.message
+      })
+    }
+    else if(response != undefined && response.status === true){
+        res.status(200).send({
+            status: 200,
+            message: `your account has been created successfully and your wallet Id is ${response.accountRef}`
+        })
     }
     else{
       res.status(500).send("An error occurred!")
@@ -67,8 +78,8 @@ app.use(
 
     let response = await acctService.FundAccount(accountRef,amount,currency,cardNumber,cardCVC,expMonth,expYear);
     if(response === null){
-      res.status(400).send({
-      status: 400,
+      res.status(404).send({
+      status: 404,
        message: 'account not found'
       });
     }
@@ -124,7 +135,7 @@ app.use(
       return res.status(400).send({
         status: 400,
         message:" you do not have sufficient fund"
-      })
+      });
     }
    else if(response != null){
       return res.status(200).send({
@@ -138,4 +149,7 @@ app.use(
     }
   });
 
-  app.listen(port, console.log(`app is listening at ${port}`))
+  app.listen(port, console.log(`app is listening at ${port}`));
+
+
+  module.exports = app;
