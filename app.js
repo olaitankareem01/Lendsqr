@@ -47,7 +47,7 @@ app.use(
     let firstName = req.body.firstName;
     var response = await acctService.CreateAccount(lastName,firstName,email,password);
     if(response != null){
-      res.status(200).send(response)
+      res.status(200).send(response);
     }
     else{
       res.status(500).send("An error occurred!")
@@ -64,15 +64,19 @@ app.use(
     let expMonth = req.body.expMonth;
     let expYear = req.body.expYear;
     let currency = req.body.currency 
-    
-    console.log(expYear);
-    let response = await acctService.FundAccount(accountRef,amount,currency,cardNumber,cardCVC,expMonth,expYear);
 
-    if(response != null){
+    let response = await acctService.FundAccount(accountRef,amount,currency,cardNumber,cardCVC,expMonth,expYear);
+    if(response === null){
+      res.status(400).send({
+      status: 400,
+       message: 'account not found'
+      });
+    }
+    else if(response != null){
       return res.status(200).send({
         status: 200,
         data: response,
-        message: `Your account has been successfully created and your wallet ID is ${response.accountRef} `
+        message: `Your account has successfully been deposited and your balance is ${response.balance}  `
       });
     }
     else{
@@ -88,11 +92,17 @@ app.use(
     let currency = req.body.currency;
     let description = req.body.description;
     let response = await acctService.TransferFund(ownersAcct,recipientAcct,amount,currency,description);
-
-    if(response != null){
+    if(response === null){
+      return res.status(400).send({
+        status: 400,
+        message:" you do not have sufficient fund"
+      })
+    }
+    else if(response !== null){
       return res.status(200).send({
         status: 200,
-        data: response 
+        data: response,
+        message: `you have successfully transferred ${response.amount} ${response.currency} to ${response.destinationAcct} and your new balance is ${response.balance}`
       });
     }
     else{
@@ -110,10 +120,17 @@ app.use(
     let currency = req.body.currency;
     let response = await acctService.WithdrawFund(accountRef,amount,accountName,accountNo,country,currency);
 
-    if(response != null){
+    if(response == null){
+      return res.status(400).send({
+        status: 400,
+        message:" you do not have sufficient fund"
+      })
+    }
+   else if(response != null){
       return res.status(200).send({
         status: 200,
-        data: response 
+        data: response,
+        message: `you have successfully withdrawn ${response.amountWithdrawn} and your ${response.balance}`
       });
     }
     else{

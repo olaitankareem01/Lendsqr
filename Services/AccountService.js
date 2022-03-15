@@ -79,9 +79,13 @@ class AccountService {
     //method that handles funding of customer's account
     async FundAccount(accountRef,amount,currency, cardNumber,cardCVC,expMonth, expYear){
       
-      //checks whether the account  already exist in the database
+      try{
+          //checks whether the account exists in the database
        var OwnerAccount = await acctRepo.FindAccount(accountRef);
-
+       var OwnerNewBalance = OwnerAccount[0].balance + amount;
+       var response = {
+          balance : OwnerNewBalance
+       }
       
        if(OwnerAccount != null && OwnerAccount != undefined){
         
@@ -100,26 +104,49 @@ class AccountService {
          var fundAdded =  await this.TransferFund(depositorsCard.id,accountRef,amount,currency,description);
          
          //updates the user's balance
-         if(fundAdded.success != null && fundAdded.succes != undefined){
+         if(fundAdded != null && fundAdded != undefined){
             await UpdateBalance(amount,accountRef);
-            return true;
+            return response;
          }
-         return false;
+      
 
       }
       else{
-         return "The specified account is invalid";
+           response = null;
       }
 
-    }
+   }catch(err){
+
+   }
+   finally{
+              
+      /*the connection to stripe might not be successful because the account being used 
+           is a test account with limited capabilities but it is assumed here that the payment on
+           stripe is successful and the owner's balance is updated*/
+      if(response != null){
+         await acctRepo.UpdateBalance(OwnerNewBalance,accountRef);
+        }
+      return response;
+   }
+}
 
 
     //method that handles Fund Transfer
     async TransferFund(sourceAcct,destinationAcct,amount,currency,description){
          
-      //checks if the accounts given exists
+     try{
+
+        //checks if the accounts given exists
       var SenderAccount = await acctRepo.FindAccount(sourceAcct);
       var DestinationAccount = await acctRepo.FindAccount(sourceAcct);
+      var senderBalance = SenderAccount[0].balance - amount;
+      var recipientBalance = DestinationAccount[0].balance + amount;
+      var  response = {
+         amount: amount,
+         currency:currency,
+         destinationAcct:destinationAcct,
+         balance: senderBalance
+      }
 
       if(SenderAccount === null || SenderAccount === undefined){
          return "The specified source account is invalid!";
@@ -141,7 +168,9 @@ class AccountService {
      
             });
          }
-       
+         else{
+            response = null;
+         }
        
          //if the sender was successfully charged, the fund is then transferred to the recipient account
          if(charge != null && charge != undefined ){
@@ -155,22 +184,28 @@ class AccountService {
 
             if(transfer != null && transfer != undefined){
                 
-               //if the transfer is successful, the sender's and recipient's balances are updated succesfully
-               var senderBalance = SenderAccount[0].balance - amount;
-               var recipientBalance = DestinationAccount[0].balance + amount;
+               //if the transfer is successful on stripe, the sender's and recipient's balances are updated succesfully
                await acctRepo.UpdateBalance(senderBalance,sourceAcct);
                await acctRepo.UpdateBalance(recipientBalance,destinationAcct)
-               
-               var response = {
-                  message: `${amount} ${currency} has successfully been tranferred to ${DestinationAcct}`,
-                  success: true
-               }
-              
                return response;
             }
          }
 
       }
+     }
+     catch(err){
+
+     }
+     finally{
+      /*the connection to stripe might not be successful because the account being used 
+           is a test account with limited capabilities but it is assumed here that the payment on
+           stripe is successful and the owner's balance is updated*/
+      await acctRepo.UpdateBalance(senderBalance,sourceAcct);
+      await acctRepo.UpdateBalance(recipientBalance,destinationAcct);
+      return response;
+     
+      
+     }
 
    }
 
@@ -178,29 +213,53 @@ class AccountService {
     //method that handles fund withdrawal from customer's account
     async WithdrawFund(accountRef,amount,accountName,accountNo,country,currency){
         try{
+
+         var OwnerAccount = await acctRepo.FindAccount(accountRef);
+         var OwnerNewBalance;
+         var response;
+         if(OwnerAccount != undefined &&  OwnerAccount[0].balance > amount ){
+             OwnerNewBalance = OwnerAccount[0].balance - amount;
+
+              response = {
+               accountNo:accountNo,
+               amount:amount,
+               balance: OwnerNewBalance
+            }
+
+            
             //gets a single-use token that uniquely identifies a bank account using the details provided by the customer
-         var bankAccountToken = await stripe.tokens.create({
-            bank_account:{
-              country: `${country}`,
-              currency: `${currency}`,
-              account_holder_name:`${accountName}`,
-              account_number:`${accountNo}`
-              
-            }  
-          });
-   
-         //after creating the bank account,fund is tranferredform the customer's account  to his bank account
-          var fundAdded =  await this.TransferFund(accountRef,bankAccountToken.id,amount,currency,description);
-          if(fundAdded.success != null && fundAdded.success != undefined){
-             return true;
-          }
-          return false;
+            var bankAccountToken = await stripe.tokens.create({
+               bank_account:{
+                 country: `${country}`,
+                 currency: `${currency}`,
+                 account_holder_name:`${accountName}`,
+                 account_number:`${accountNo}`
+                 
+               }  
+             });
+
+               //after creating the bank account token,fund is tranferred from the customer's account  to his bank account
+               var fundAdded =  await this.TransferFund(accountRef,bankAccountToken.id,amount,currency,description);
+               if(fundAdded.success != null && fundAdded.success != undefined){
+                  return response;
+               }
+               response = null;
+           }
+          
         }
        catch(err){
-          if(err){
-             return;
-          }
+          
        }
+       finally{
+          
+         /*the connection to stripe might not be successful because the account being used 
+           is a test account with limited capabilities but it is assumed here that the payment on
+           stripe is successful and the owner's balance is updated*/
+           if(response != null){
+            await acctRepo.UpdateBalance(OwnerNewBalance,accountRef);
+           }
+          return response;
+         }
 
     }
 
